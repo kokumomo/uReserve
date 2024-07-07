@@ -1,3 +1,18 @@
+# 61. Event 新規登録
+
+``` php
+コンポーネントはcomponentsフォルダを作成し  
+components/textarea.blade.php を作成  
+<x-textarea>で使用できる  
+
+index.blade.phpにボタン追加  
+<button onclick="location.href='{{ route('events.create')}}'" class="flex mb-4 ml-auto text-white bg-pink-500 border-0 py-2 px-6 focus:outline-none hover:bg-pink-600 rounded">新規登録</button>
+
+```
+
+# 62, 63. 新規登録フォーム調整
+
+``` php
 <x-app-layout>
   <x-slot name="header">
     <h2 class="font-semibold text-xl text-gray-800 leading-tight">
@@ -58,3 +73,45 @@
   </div>
   <script src="{{ mix('js/flatpickr.js')}}"></script>
 </x-app-layout>
+```
+
+# 64. バリデーション
+
+``` php
+
+バリデーション 日本語化
+lang/ja/validation.php
+
+'attributes' => [
+'email' => 'メールアドレス',
+'password' => 'パスワード',
+'name' => '名前',
+'event_name' => 'イベント名',
+'information' => 'イベント詳細',
+'event_date' =>'イベントの日付',
+'end_time' => '終了時間',
+'start_time' => '開始時間',
+'max_people' => '定員',
+],
+
+lang/ja.json
+{"Whoops! Something went wrong.":"問題が発生しました。"}
+
+
+フォームリクエスト
+app/Http/Requests/StoreEventRequest.php
+
+public function authorize()
+{ return true; }
+
+public function rules()
+{ return [
+'event_name' => ['required', 'max:50'],
+'information' => ['required', 'max:200'],
+'event_date' => ['required', 'date'],
+'start_time' => ['required'],
+'end_time' => ['required', 'after:start_time'],
+'max_people' => ['required', 'numeric', 'between:1,20'],
+'is_visible' => ['required', 'boolean']
+];}
+```
