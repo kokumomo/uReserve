@@ -1,117 +1,100 @@
-# 61. Event 新規登録
+# 65. 保存処理
 
 ``` php
-コンポーネントはcomponentsフォルダを作成し  
-components/textarea.blade.php を作成  
-<x-textarea>で使用できる  
+Models/Event.php
 
-index.blade.phpにボタン追加  
-<button onclick="location.href='{{ route('events.create')}}'" class="flex mb-4 ml-auto text-white bg-pink-500 border-0 py-2 px-6 focus:outline-none hover:bg-pink-600 rounded">新規登録</button>
+Event:create()で保存できるようにするためにモデルに追記
+(DBテーブルの列名)
+app/Models/Event.php
+protected $filable = [
+'name',
+'information',
+'max_people',
+'start_date',
+'end_date',
+'is_visible'
+];
+
+
+EventControler@store
+use Carbon\Carbon;
+// formは event_date, start_time, end_time 
+// modelはstart_date, end_date
+// event_dateとstart_timeを繋げる
+
+$start = $request['event_date'] . " " . $request['start_time'];
+// Carbonで指定した日付の方に変換
+$start_date = Carbon::createFromFormat('Y-m-d H:i', $start);
+
+Event:create([
+  'name' => $request['event_name'],
+  'information' => $request['information'],
+  'start_date' => $start_date,
+  'end_date' => $end_date,
+  'max_people' => $request['max_people'],
+  'is_visible' => $request['is_visible'],
+]);
+session()->flash(‘status’, ‘登録okです’);
+return to_route(‘events.index’); //名前付きルート
 
 ```
 
-# 62, 63. 新規登録フォーム調整
+# 68、69. 保存時の注意(重複チェック)、クエリ
 
 ``` php
-<x-app-layout>
-  <x-slot name="header">
-    <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-      イベント新規登録
-    </h2>
-  </x-slot>
+重複チェックのクエリ
 
-  <div class="py-12">
-    <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
-      <div class="bg-white overflow-hidden shadow-xl sm:rounded-lg">
+$check = DB::table('events')
+->whereDate('start_date', $request['event_date']) // 日にち
+->whereTime('end_date' ,'>',$request['start_time'])
+->whereTime('start_date', '<', $request['end_time'])
+->exists(); // 存在確認
 
-        <div class="max-w-2xl py-4 mx-auto">
-          <x-jet-validation-errors class="mb-4" />
-          <form method="POST" action="{{ route('events.store') }}">
-            @csrf
+// dd($check);
+if($check){ // 存在したら
+session()->flash('status', 'この時間帯は既に他の予約が存在します。');
+return view('manager.events.create');
+}
 
-            <div>
-              <x-jet-label for="event_name" value="イベント名" />
-              <x-jet-input id="event_name" class="block mt-1 w-full" type="text" name="event_name" :value="old('event_name')" required autofocus />
-            </div>
-            <div class="mt-4">
-              <x-jet-label for="information" value="イベント詳細" />
-              <x-textarea row="3" id="information" name="information" class="block mt-1 w-full">{{ old('information')}}</x-textarea>
-            </div>
-            <div class="md:flex justify-between">
-              <div class="mt-4">
-                <x-jet-label for="event_date" value="イベント日付" />
-                <x-jet-input id="event_date" class="block mt-1 w-full" type="text" name="event_date" required />
-              </div>
-
-              <div class="mt-4">
-                <x-jet-label for="start_time" value="開始時間" />
-                <x-jet-input id="start_time" class="block mt-1 w-full" type="text" name="start_time" required />
-              </div>
-
-              <div class="mt-4">
-                <x-jet-label for="end_time" value="終了時間" />
-                <x-jet-input id="end_time" class="block mt-1 w-full" type="text" name="end_time" required />
-              </div>
-            </div>
-            <div class="md:flex justify-between items-end">
-              <div class="mt-4">
-                <x-jet-label for="max_people" value="定員数" />
-                <x-jet-input id="max_people" class="block mt-1 w-full" type="number" name="max_people" required />
-              </div>
-              <div class="flex space-x-4 justify-around">
-                <input type="radio" name="is_visible" value="1" checked />表示
-                <input type="radio" name="is_visible" value="0" />非表示
-              </div>
-              <x-jet-button class="ml-4">
-                新規登録
-              </x-jet-button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-  </div>
-  <script src="{{ mix('js/flatpickr.js')}}"></script>
-</x-app-layout>
 ```
 
-# 64. バリデーション
-
+# 68. サービスへの切り離し
 ``` php
 
-バリデーション 日本語化
-lang/ja/validation.php
+ファットコントローラを防ぐため
+app/Services/EventServices.php
+<?php
 
-'attributes' => [
-'email' => 'メールアドレス',
-'password' => 'パスワード',
-'name' => '名前',
-'event_name' => 'イベント名',
-'information' => 'イベント詳細',
-'event_date' =>'イベントの日付',
-'end_time' => '終了時間',
-'start_time' => '開始時間',
-'max_people' => '定員',
-],
+namespace App\Services;
 
-lang/ja.json
-{"Whoops! Something went wrong.":"問題が発生しました。"}
+use Iluminate\Support\Facades\DB;
+use Carbon\Carbon;
+class EventServices{}
 
 
-フォームリクエスト
-app/Http/Requests/StoreEventRequest.php
+日付+時間
+app/Services/EventService.php
+public static function joinDateAndTime($date, $time)
+{
+$join = $date . "" . $time;
+return Carbon::createFromFormat('Y-m-d H:i',$join);
+}
 
-public function authorize()
-{ return true; }
 
-public function rules()
-{ return [
-'event_name' => ['required', 'max:50'],
-'information' => ['required', 'max:200'],
-'event_date' => ['required', 'date'],
-'start_time' => ['required'],
-'end_time' => ['required', 'after:start_time'],
-'max_people' => ['required', 'numeric', 'between:1,20'],
-'is_visible' => ['required', 'boolean']
-];}
+EventControler@store修正
+use app/Services/EventService;
+
+$check = EventServices::checkEventDuplication(
+  $request['event_date'],$request['start_time'],$request['end_time']
+);
+略
+$startDate = EventServices::joinDateAndTime($request['event_date'],$request['start_time']);
+$endDate = EventServices::joinDateAndTime($request['event_date'],$request['end_time']);
+
+Event:create([
+略
+'start_date' => $startDate,
+'end_date' => $endDate,
 ```
+
+
