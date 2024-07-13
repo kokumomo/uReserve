@@ -1,100 +1,114 @@
-# 65. 保存処理
+# 69. Event@show
 
 ``` php
-Models/Event.php
+events/Index.blade.php
 
-Event:create()で保存できるようにするためにモデルに追記
-(DBテーブルの列名)
-app/Models/Event.php
-protected $filable = [
-'name',
-'information',
-'max_people',
-'start_date',
-'end_date',
-'is_visible'
-];
+クリック時にパラメータを渡す
+<td class="text-blue-500">
+<a href="{{ route(‘events.show’, ['event' => $event->id]) }}">{{ $event->name }}
+</a>
+</td>
 
+EventControler@show
 
-EventControler@store
-use Carbon\Carbon;
-// formは event_date, start_time, end_time 
-// modelはstart_date, end_date
-// event_dateとstart_timeを繋げる
-
-$start = $request['event_date'] . " " . $request['start_time'];
-// Carbonで指定した日付の方に変換
-$start_date = Carbon::createFromFormat('Y-m-d H:i', $start);
-
-Event:create([
-  'name' => $request['event_name'],
-  'information' => $request['information'],
-  'start_date' => $start_date,
-  'end_date' => $end_date,
-  'max_people' => $request['max_people'],
-  'is_visible' => $request['is_visible'],
-]);
-session()->flash(‘status’, ‘登録okです’);
-return to_route(‘events.index’); //名前付きルート
-
-```
-
-# 68、69. 保存時の注意(重複チェック)、クエリ
-
-``` php
-重複チェックのクエリ
-
-$check = DB::table('events')
-->whereDate('start_date', $request['event_date']) // 日にち
-->whereTime('end_date' ,'>',$request['start_time'])
-->whereTime('start_date', '<', $request['end_time'])
-->exists(); // 存在確認
-
-// dd($check);
-if($check){ // 存在したら
-session()->flash('status', 'この時間帯は既に他の予約が存在します。');
-return view('manager.events.create');
-}
-
-```
-
-# 68. サービスへの切り離し
-``` php
-
-ファットコントローラを防ぐため
-app/Services/EventServices.php
-<?php
-
-namespace App\Services;
-
-use Iluminate\Support\Facades\DB;
-use Carbon\Carbon;
-class EventServices{}
-
-
-日付+時間
-app/Services/EventService.php
-public static function joinDateAndTime($date, $time)
+public function show(Event $event)
 {
-$join = $date . "" . $time;
-return Carbon::createFromFormat('Y-m-d H:i',$join);
+// dd($event); イベントモデルを取得
+$event = Event:findOrFail($event->id);
+return view(‘manager.events.show’, compact(‘event’));
 }
 
+events/show.blade.php
 
-EventControler@store修正
-use app/Services/EventService;
+create.blade.phpをコピペ
+form getメソッド時は@csrf不要なので削除
+テキストエリア(改行の変換)
+{!! nl2br(e($event->information)) !!}
+e() ・・エスケープする(サニタイズ)
+nl2br・・改行を<br />に変換
+{!! !!} ・・<br>だけエスケープしない
 
-$check = EventServices::checkEventDuplication(
-  $request['event_date'],$request['start_time'],$request['end_time']
+```
+
+# 70. アクセサ・ミューテタ
+``` php
+
+データベース
+保存(set) ミューテタ
+取得(get) アクセサ
+DBに情報保存時やDBから情報取得時に
+データを加工する機能
+
+Laravel9
+モデル内に記載
+use Iluminate\Database\Eloquent\Casts\Attribute;
+protected function firstName(): Attribute // 戻り値の型
+{
+return new Attribute(
+get: fn ($value) => ucfirst($value), // アクセサ
+set: fn ($value) => strtolower($value), // ミューテタ
 );
-略
-$startDate = EventServices::joinDateAndTime($request['event_date'],$request['start_time']);
-$endDate = EventServices::joinDateAndTime($request['event_date'],$request['end_time']);
+}
+$user->first_name = ‘Saly’; //使う時はモデル->メソッド名
 
-Event:create([
-略
-'start_date' => $startDate,
-'end_date' => $endDate,
+PHP7.4 アロー関数
+
+無名関数を簡単に書ける文法
+(PHP8.0時点では1行でしかかけない)
+fn($x) => $x + $y;
+https://www.php.net/manual/ja/functions.arrow.php
+
+```
+
+# 71. アクセサの実装
+``` php
+Event.php
+
+use Iluminate\Database\Eloquent\Casts\Attribute;
+use Carbon\Carbon;
+
+protected function eventDate(): Attribute
+{ 
+  return new Attribute(
+  get: fn () => Carbon:parse($this->start_date)->format('Y年m月d日')
+  );
+}
+
+protected function startTime(): Attribute
+{ 
+  return new Attribute(
+  get: fn () => Carbon:parse($this->start_date)->format('H時i分')
+  );
+}
+
+protected function endTime(): Attribute
+{ 
+  return new Attribute(
+  get: fn () => Carbon:parse($this->end_date)->format('H時i分')
+  );
+}
+
+EventControler@show
+
+$event = Event:findOrFail($event->id);
+$eventDate = $event->eventDate;
+$startTime = $event->startTime;
+$endTime = $event->endTime;
+// dd($eventDate, $startTime, $endTime);
+return view('manager.events.show',
+compact(‘event’, ‘eventDate’, ‘startTime’, ‘endTime’));
+
+events/show.blade.php 残り
+
+日付 {{ $event->eventDate }}
+開始時間 {{ $event->startTime }}
+終了時間 {{ $event->endTime }}
+@if($event->is_visible)
+表示中
+@else
+非表示
+@endif
+e
 ```
 
 
