@@ -45,7 +45,7 @@
             <div class="md:flex justify-between items-end">
               <div class="mt-4">
                 <x-jet-label for="max_people" value="定員数" />
-                <x-jet-input id="max_people" class="block mt-1 w-full" type="number" name="max_people" required />
+                {{ $event->max_people }}
               </div>
               <div class="flex space-x-4 justify-around">
                 @if($event->is_visible)
@@ -55,7 +55,7 @@
                 @endif
               </div>
               <x-jet-button class="ml-4">
-                新規登録
+                編集する
               </x-jet-button>
             </div>
           </form>

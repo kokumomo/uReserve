@@ -1,32 +1,87 @@
-# 69. Event@show
-
+# 73. edit
 ``` php
-events/Index.blade.php
+EventControler@edit は
+ほぼshowと同じ(return viewでeditに渡す)
 
-クリック時にパラメータを渡す
-<td class="text-blue-500">
-<a href="{{ route(‘events.show’, ['event' => $event->id]) }}">{{ $event->name }}
-</a>
-</td>
+events/edit.blade.phpは
+create(inputタグ)と
+show(アクセサで取得した値など)を混ぜてつくる
 
-EventControler@show
+(form method=“post” でupdateに渡す,
+@csrf @method(‘put’)をつけるなど)
 
-public function show(Event $event)
-{
-// dd($event); イベントモデルを取得
-$event = Event:findOrFail($event->id);
-return view(‘manager.events.show’, compact(‘event’));
+表示非表示
+<input type="radio" name="is_visible" value="1"
+@if($event->is_visible === 1 ){ checked } @endif />表示
+<input type="radio" name="is_visible" value="0"
+@if($event->is_visible === 0 ){ checked } @endif/>非表示
+
+```
+
+# 74. update
+``` php
+EventControler@update はstoreから流用する
+(Event:createではなく、
+$event = Event:findOrFail($id)で指定して
+$event->name = $request[‘name’] とする
+$event->save(); で保存
+
+UpdateEventRequestがあるので
+StoreEventRequestをコピーする
+日付表示の変更
+
+
+```
+
+# 75. updateの修正
+``` php
+Models/Event.php アクセサで日付表示を変更する
+protected function editEventDate(): Attribute
+{ return new Attribute(
+  get: fn () => Carbon:parse($this->start_date)->format('Y-m-d'),
+  );
 }
 
-events/show.blade.php
+EventControler@edit
 
-create.blade.phpをコピペ
-form getメソッド時は@csrf不要なので削除
-テキストエリア(改行の変換)
-{!! nl2br(e($event->information)) !!}
-e() ・・エスケープする(サニタイズ)
-nl2br・・改行を<br />に変換
-{!! !!} ・・<br>だけエスケープしない
+public function edit(Event $event)
+{
+  $event = Event::findOrFail($event->id);
+  $eventDate = $event->editEventDate;
+
+EventService
+
+既にイベントが存在しているので、
+重複しているのが1件なら問題なく、1件より多ければエラー
+public static function countEventDuplication($eventDate, $startTime, $endTime)
+{
+return DB:table('events')
+->whereDate('start_date', $eventDate)
+->whereTime('end_date' ,'>',$startTime)
+->whereTime('start_date', '<', $endTime)
+->count();
+}
+EventControler@update
+22
+$check = EventService:countEventDuplication(
+$request['event_date'],$request['start_time'],$request['end_time']);
+if($check > 1){
+session()->flash('status', 'この時間帯は既に他の予約が存在します。');
+$event = Event:findOrFail($event->id);
+$eventDate = $event->editEventDate;
+$startTime = $event->startTime;
+$endTime = $event->endTime;
+return view('manager.events.edit',
+compact('event', 'eventDate', 'startTime', 'endTime'));
+}
+削除処理について
+23
+後程、予約情報とリレーションを組むため、
+やや複雑になるということと、
+Laravel第２弾(マルチログインでECサイト)で
+リレーション込みの削除方法、
+ソフトデリートなどを詳しく解説していますので
+今回は割愛させていただきます。
 
 ```
 
