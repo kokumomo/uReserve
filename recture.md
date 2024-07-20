@@ -1,169 +1,77 @@
-# 73. edit
+# 76. 過去のイベント
 ``` php
-EventControler@edit は
-ほぼshowと同じ(return viewでeditに渡す)
+ルーティング
 
-events/edit.blade.phpは
-create(inputタグ)と
-show(アクセサで取得した値など)を混ぜてつくる
+現在、全てのイベントが表示されている
+今日以降のイベントと
+昨日以前のイベントで画面を切り替える
+ルーティングは上から処理される
+リソースの下に書くと /past部分がパラメータと勘違いされるので
+リソースの上に書く
 
-(form method=“post” でupdateに渡す,
-@csrf @method(‘put’)をつけるなど)
+routes/web.php
+Route:prefix('manager')
+->middleware('can:manager-higher')->group(function(){
+Route:get('events/past', [EventControler:class, 'past'])->name('events.past');
+Route:resource('events', EventControler:class);
+});
 
-表示非表示
-<input type="radio" name="is_visible" value="1"
-@if($event->is_visible === 1 ){ checked } @endif />表示
-<input type="radio" name="is_visible" value="0"
-@if($event->is_visible === 0 ){ checked } @endif/>非表示
-
-```
-
-# 74. update
-``` php
-EventControler@update はstoreから流用する
-(Event:createではなく、
-$event = Event:findOrFail($id)で指定して
-$event->name = $request[‘name’] とする
-$event->save(); で保存
-
-UpdateEventRequestがあるので
-StoreEventRequestをコピーする
-日付表示の変更
-
-
-```
-
-# 75. updateの修正
-``` php
-Models/Event.php アクセサで日付表示を変更する
-protected function editEventDate(): Attribute
-{ return new Attribute(
-  get: fn () => Carbon:parse($this->start_date)->format('Y-m-d'),
-  );
+コントローラとビュー
+コントローラ
+public function past()
+{
+$today = Carbon:today();
+$events = DB:table('events')
+->whereDate('start_date', '<', $today )
+->orderBy('start_date', 'desc')
+->paginate(10);
+return view('manager.events.past', compact('events'));
 }
+
+ビュー側 manager/events/past.blade.php
+index.blade.phpを参考
+
+```
+# 77. indexイベントを本日以降のみ表示など
+``` php
+今日より前なら編集ボタンを消す
+
+/manager/events/show.blade.php
+// ddやvar_dumpで見るとわかりますが型が違うのでformatをかける
+@if($event->eventDate >= \Carbon\Carbon:today()->format('Y年m月d日'))
+<x-jet-button class="ml-4">
+編集する
+</x-jet-button>
+@endif
+
+EventControler@index
+
+$today = Carbon:today();
+$events = DB:table('events')
+->whereDate('start_date', '>=' , $today) // 追加
+->orderBy('start_date', 'asc')
+->paginate(10);
+
+過去イベントへのリンク
+
+manager/events/index.blade.php
+<div class="flex justify-between">
+<button onclick="location.href='{{ route(‘events.past')}}'">
+過去のイベント</button>
+<button onclick="location.href='{{ route(‘events.create')}}'"">
+新規登録</button>
+</div>
+
+```
+
+# 78. 過去イベントはurl直接変更しても編集不可にする
+``` php
 
 EventControler@edit
-
 public function edit(Event $event)
 {
-  $event = Event::findOrFail($event->id);
-  $eventDate = $event->editEventDate;
-
-EventService
-
-既にイベントが存在しているので、
-重複しているのが1件なら問題なく、1件より多ければエラー
-public static function countEventDuplication($eventDate, $startTime, $endTime)
-{
-return DB:table('events')
-->whereDate('start_date', $eventDate)
-->whereTime('end_date' ,'>',$startTime)
-->whereTime('start_date', '<', $endTime)
-->count();
-}
-EventControler@update
-22
-$check = EventService:countEventDuplication(
-$request['event_date'],$request['start_time'],$request['end_time']);
-if($check > 1){
-session()->flash('status', 'この時間帯は既に他の予約が存在します。');
 $event = Event:findOrFail($event->id);
-$eventDate = $event->editEventDate;
-$startTime = $event->startTime;
-$endTime = $event->endTime;
-return view('manager.events.edit',
-compact('event', 'eventDate', 'startTime', 'endTime'));
+$today = Carbon:today()->format('Y年m月d日');
+if($event->eventDate < $today ){
+return abort(404);
 }
-削除処理について
-23
-後程、予約情報とリレーションを組むため、
-やや複雑になるということと、
-Laravel第２弾(マルチログインでECサイト)で
-リレーション込みの削除方法、
-ソフトデリートなどを詳しく解説していますので
-今回は割愛させていただきます。
-
-```
-
-# 70. アクセサ・ミューテタ
-``` php
-
-データベース
-保存(set) ミューテタ
-取得(get) アクセサ
-DBに情報保存時やDBから情報取得時に
-データを加工する機能
-
-Laravel9
-モデル内に記載
-use Iluminate\Database\Eloquent\Casts\Attribute;
-protected function firstName(): Attribute // 戻り値の型
-{
-return new Attribute(
-get: fn ($value) => ucfirst($value), // アクセサ
-set: fn ($value) => strtolower($value), // ミューテタ
-);
-}
-$user->first_name = ‘Saly’; //使う時はモデル->メソッド名
-
-PHP7.4 アロー関数
-
-無名関数を簡単に書ける文法
-(PHP8.0時点では1行でしかかけない)
-fn($x) => $x + $y;
-https://www.php.net/manual/ja/functions.arrow.php
-
-```
-
-# 71. アクセサの実装
-``` php
-Event.php
-
-use Iluminate\Database\Eloquent\Casts\Attribute;
-use Carbon\Carbon;
-
-protected function eventDate(): Attribute
-{ 
-  return new Attribute(
-  get: fn () => Carbon:parse($this->start_date)->format('Y年m月d日')
-  );
-}
-
-protected function startTime(): Attribute
-{ 
-  return new Attribute(
-  get: fn () => Carbon:parse($this->start_date)->format('H時i分')
-  );
-}
-
-protected function endTime(): Attribute
-{ 
-  return new Attribute(
-  get: fn () => Carbon:parse($this->end_date)->format('H時i分')
-  );
-}
-
-EventControler@show
-
-$event = Event:findOrFail($event->id);
-$eventDate = $event->eventDate;
-$startTime = $event->startTime;
-$endTime = $event->endTime;
-// dd($eventDate, $startTime, $endTime);
-return view('manager.events.show',
-compact(‘event’, ‘eventDate’, ‘startTime’, ‘endTime’));
-
-events/show.blade.php 残り
-
-日付 {{ $event->eventDate }}
-開始時間 {{ $event->startTime }}
-終了時間 {{ $event->endTime }}
-@if($event->is_visible)
-表示中
-@else
-非表示
-@endif
-e
-```
-
-
