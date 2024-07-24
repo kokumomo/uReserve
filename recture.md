@@ -1,77 +1,127 @@
-# 76. 過去のイベント
+# 79. Reservation(モデル、マイグレーション、シーダー)
 ``` php
-ルーティング
 
-現在、全てのイベントが表示されている
-今日以降のイベントと
-昨日以前のイベントで画面を切り替える
-ルーティングは上から処理される
-リソースの下に書くと /past部分がパラメータと勘違いされるので
-リソースの上に書く
+複数のユーザーが
+複数のイベントを予約できる
+・・多対多
+中間(pivot)テーブルをはさみ
+1対多
+自動で生成するならevent_user(アルファベット順)
+今回はReservationというモデルを作成し設定
 
-routes/web.php
-Route:prefix('manager')
-->middleware('can:manager-higher')->group(function(){
-Route:get('events/past', [EventControler:class, 'past'])->name('events.past');
-Route:resource('events', EventControler:class);
+モデル
+
+php artisan make:model Reservation -m
+App\Models\Reservation.php
+まとめて登録できるように設定
+protected $filable = [
+'user_id',
+'event_id',
+'number_of_people'
+];
+
+マイグレーション
+
+database/migrations/create_reservations_table.php
+public function up()
+{
+Schema:create('reservations', function (Blueprint $table) {
+$table->id();
+$table->foreignId('user_id')->constrained()->onUpdate('cascade');
+$table->foreignId('event_id')->constrained()->onUpdate('cascade');
+$table->integer('number_of_people');
+$table->datetime('canceled_date')->nulable();
+$table->timestamps();
 });
-
-コントローラとビュー
-コントローラ
-public function past()
-{
-$today = Carbon:today();
-$events = DB:table('events')
-->whereDate('start_date', '<', $today )
-->orderBy('start_date', 'desc')
-->paginate(10);
-return view('manager.events.past', compact('events'));
 }
 
-ビュー側 manager/events/past.blade.php
-index.blade.phpを参考
+ダミーデータ
+
+php artisan make:Seed ReservationSeeder
+use Iluminate\Support\Facades\DB;
+public function run()
+{
+DB:table('reservations')->insert([[
+'user_id' => 1,
+'event_id' => 1,
+'number_of_people' => 5
+],[
+'user_id' => 2,
+'event_id' => 1,
+'number_of_people' => 3
+],[
+'user_id' => 1,
+'event_id' => 2,
+'number_of_people' => 2
+]
+]);
+
+DatabaseSeeder
+
+ReservationはUser, Eventそれぞれに紐づくので、
+事前にEvent, Userを作った上で、
+Reservationのダミーデータが入るようにします。
+public function run()
+{
+Event:factory(100)->create();
+$this->cal([
+UserSeeder:class,
+ReservationSeeder:class
+]);
 
 ```
-# 77. indexイベントを本日以降のみ表示など
-``` php
-今日より前なら編集ボタンを消す
 
-/manager/events/show.blade.php
-// ddやvar_dumpで見るとわかりますが型が違うのでformatをかける
-@if($event->eventDate >= \Carbon\Carbon:today()->format('Y年m月d日'))
-<x-jet-button class="ml-4">
-編集する
-</x-jet-button>
+# 80. 予約数の合計クエリ
+
+``` php
+SQLの場合
+SELECT `event_id`,
+sum(`number_of_people`) FROM
+`reservations` GROUP by `event_id`
+予約人数の合計クエリ
+
+select内でsumを使うため
+クエリビルダのDB:rawで対応
+$reservedPeople = DB:table('reservations')
+->select('event_id', DB:raw('sum(number_of_people)
+as number_of_people'))
+->groupBy(‘event_id’);
+
+```
+
+# 81. 外部結合
+
+``` php
+
+サブクエリを外部結合で
+
+内部結合・・合計人数がない場合データが表示されない
+外部結合・・合計人数がない場合、nulとして表示される
+$events = DB:table('events')
+->leftJoinSub($reservedPeople, 'reservedPeople',
+function($join){
+$join->on('events.id', '=', 'reservedPeople.event_id');
+})
+->whereDate('events.start_date', '<' , $today)
+->orderBy('events.start_date', 'asc')
+->paginate(10);
+
+
+```
+
+# 82. 予約人数の表示
+
+``` php
+
+ビュー側
+
+予約人数の箇所
+<td class="px-4 py-3">
+@if(is_nul($event->number_of_people))
+0
+@else
+{{ $event->number_of_people }}
 @endif
-
-EventControler@index
-
-$today = Carbon:today();
-$events = DB:table('events')
-->whereDate('start_date', '>=' , $today) // 追加
-->orderBy('start_date', 'asc')
-->paginate(10);
-
-過去イベントへのリンク
-
-manager/events/index.blade.php
-<div class="flex justify-between">
-<button onclick="location.href='{{ route(‘events.past')}}'">
-過去のイベント</button>
-<button onclick="location.href='{{ route(‘events.create')}}'"">
-新規登録</button>
-</div>
+</td>
 
 ```
-
-# 78. 過去イベントはurl直接変更しても編集不可にする
-``` php
-
-EventControler@edit
-public function edit(Event $event)
-{
-$event = Event:findOrFail($event->id);
-$today = Carbon:today()->format('Y年m月d日');
-if($event->eventDate < $today ){
-return abort(404);
-}
