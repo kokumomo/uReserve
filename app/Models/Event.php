@@ -24,28 +24,35 @@ class Event extends Model
     protected function eventDate(): Attribute
     {
         return new Attribute(
-            get: fn() => Carbon::parse($this->start_date)->format('Y年m月d日')
+            get: fn () => Carbon::parse($this->start_date)->format('Y年m月d日')
         );
     }
 
     protected function editEventDate(): Attribute
     {
         return new Attribute(
-            get: fn() => Carbon::parse($this->start_date)->format('Y-m-d')
+            get: fn () => Carbon::parse($this->start_date)->format('Y-m-d')
         );
     }
 
     protected function startTime(): Attribute
     {
         return new Attribute(
-            get: fn() => Carbon::parse($this->start_date)->format('H時i分')
+            get: fn () => Carbon::parse($this->start_date)->format('H時i分')
         );
     }
 
     protected function endTime(): Attribute
     {
         return new Attribute(
-            get: fn() => Carbon::parse($this->end_date)->format('H時i分')
+            get: fn () => Carbon::parse($this->end_date)->format('H時i分')
         );
+    }
+
+    public function users()
+    {
+        return $this->belongsToMany(User::class, 'reservations')
+        ->withPivot('id', 'number_of_people', 'canceled_date');
+
     }
 }
