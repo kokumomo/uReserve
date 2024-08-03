@@ -1,120 +1,195 @@
-# 83. 予約情報(リレーション設定)
+# 87. 予約カレンダーの準備
 ``` php
 
-リレーションの設定
+予約カレンダー
 
-belongsToMany・・多対多のリレーション、第２引数は中間テーブル名
-withPivotで中間テーブル内の取得したい情報を指定
-App\Models\Event.php
-public function users()
-{
-return $this->belongsToMany(User::class, 'reservations')
-->withPivot('id', 'number_of_people', 'canceled_date');
+ログインなしで表示可能
+予約時はログイン(会員登録)必要
+週間カレンダー
+選択日を含む7日間を表示
+10時～20時 30分単位(Flatpickr設定)
+Livewireで作成
+calendar.blade.php
+
+ルートのwelcomeをcalendarに変更
+layouts/app.blade.phpからlivewire, mix() などをコピー
+flatpickrはevents/create.blade.phpからコピー
+
+resources/js/flatpickr.js
+
+latpickr("#calendar", {
+  "locale": Japanese,
+  minDate: "today",
+  maxDate: new Date().fp_incr(30) 
+});
+
+const setting = {
+  minuteIncrement: 30 // 追記
 }
+```
 
-App\Models\User.php
-use APP\Models\Event;
-public function events()
+# 88. livewier Calendar作成
+
+``` php
+Livewireでカレンダー
+
+php artisan make:livewire Calendar
+app/Http/Livewire/Calendar.php
+resources/views/livewire/calender.blade.phpが生成
+
+app/Http/Livewire/Calendar.php
+
+use Carbon\Carbon;
+class Calendar extends Component
+{
+  public $currentDate; 
+  public $day; 
+  public $currentWeek;
+
+  public function mount()
   {
-      return $this->belongsToMany(Event::class, 'reservations')
-          ->withPivot('id', 'number_of_people', 'canceled_date');
+    $this->currentDate = Carbon::today();
+    $this->currentWeek = [];
+    for($i = 0; $i < 7; $i++ )
+    {
+    $this->day = Carbon::today()->addDays($i)->format('m月d日');
+    array_push($this->currentWeek, $this->day );
+    }
+  // dd($this->currentWeek);
   }
-
-EventControler@show
-
-public function show(Event $event)
-{
-$event = Event:findOrFail($event->id);
-$users = $event->users;
-// dd($event, $users);
-略
-return view('manager.events.show',
-compact('event', 'users', 'eventDate', 'startTime', 'endTime'));
 }
 
-events/show.blade.php
+livewire/calendar.blade.php
 
-<div class="py-4">
-<div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
-<div class="bg-white overflow-hidden shadow-xl sm:rounded-lg">
-<div class="max-w-2xl mx-auto">
-@if (!$users->isEmpty())
-予約情報
-@endif
+<div>
+  <x-jet-input id="calendar" class="block mt-1 w-ful" type="text" name="calendar" />
+  {{ $currentDate }}
+  <div class="flex">
+    @for ($day = 0; $day < 7; $day++)
+    {{ $currentWeek[$day] }}
+    @endfor
+  </div>
 </div>
-</div>
-</div>
-</div>
+
+views/calendar.blade.php
+
+@livewire('calendar') // コンポーネント読み込み
 ```
 
-# 84. cancel分を除いて予約情報を表示
+# 89. wire:changeで日付を更新
+
 ``` php
-ReservationSeeder.php
 
-キャンセルした分は表示しない事を確認するためダミーに追記
-DB:table('reservations')->insert([[
-'user_id' => 1,
-'event_id' => 1,
-'number_of_people' => 5,
-'canceled_date' => nul
-],
-略
-[
-'user_id' => 2,
-'event_id' => 2,
-'number_of_people' => 2,
-'canceled_date' => '2022-03-01 00:00:00'
-]
+datepickerを変更したら値も変える
 
-EventControler@show
+views/livewire/calendar.blade.php
 
-略
-$reservations = []; // 連想配列を作成
-foreach($users as $user)
+<input id="calendar" class="block mt-1 w-ful"　type="text" name="calendar"　value="{{ $currentDate }}"　wire:change="getDate($event.target.value)"/>
+
+app/Http/Livewire/Calendar.php
+public function getDate($date)
 {
-$reservedInfo = [
-'name' => $user->name,
-'number_of_people' => $user->pivot->number_of_people,
-'canceled_date' => $user->pivot->canceled_date
+$this->currentDate = $date; //文字列
+$this->currentWeek = [];
+for($i = 0; $i < 7; $i++ )
+{
+$this->day = Carbon::parse($this->currentDate)->addDays($i)-
+>format('m月d日'); // parseでCarbonインスタンスに変換後 日付を加算
+array_push($this->currentWeek, $this->day );
+}
+}
+
+```
+
+# 90. whereBetweenで指定期間のイベントを取得
+
+``` php
+選んだ日から7日分のイベント取得
+
+ダミーデータが過去の日付が多い関係で、
+一旦カレンダーを過去日も選択できるようにします。
+
+resources/js/flatpickr.js
+flatpickr("#calendar", {
+"locale": Japanese,
+// minDate: “today", //コメントアウト
+maxDate: new Date().fp_incr(30)
+});
+
+イベント情報の取得
+コードが長くなるので、Serviceに切り離すことにします。
+
+App/Services/EventService.php
+public static function getWeekEvents($startDate, $endDate)
+{
+$reservedPeople = DB::table('reservations')
+->select('event_id', DB::raw('sum(number_of_people) as number_of_people'))
+->groupBy('event_id');
+
+return DB:table('events')
+->leftJoinSub($reservedPeople, 'reservedPeople', function($join){
+$join->on('events.id', '=', 'reservedPeople.event_id');
+})
+->whereBetween('start_date', [$startDate, $endDate])
+->orderBy('start_date', 'asc')
+->get();
+}
+
+Livewire/Calendar.php
+
+use App/Services/EventService;
+public $sevenDaysLater; public $events; // 追加
+public function mount()
+{
+$this->currentDate = Carbon::today();
+$this->sevenDaysLater = $this->currentDate->addDays(7);
+
+$this->events = EventService::getWeekEvents(
+$this->currentDate->format('Y-m-d'),
+$this->sevenDaysLater->format('Y-m-d')
+);
+
+dd($this->events);
+
+```
+
+# 91. CarbonImmutable
+
+``` php
+初期表示で7日増えていた問題
+
+Carbonはミュータブル(可変)とイミュータブル(不変)がある
+デフォルトはミュータブル。
+$this->currentDate = Carbon:today(); // こっちも変わってしまう
+$this->sevenDaysLater = $this->currentDate->addDays(7);
+
+対策1 ->copy()を使ってコピーしてから処理する
+$this->currentDate = Carbon:today();
+$this->sevenDaysLater = $this->currentDate->copy()->addDays(7);
+
+対策2 イミュータブル版を使う
+use Carbon\CarbonImmutable;
+Carbonの箇所を CarbonImmutable に変更する
+
+```
+
+# 93. ダミーデータの修正
+
+``` php
+
+10時～20時 30分単位
+$availableHour = $this->faker->numberBetween(10, 18); //10時～18時
+$minutes = [0, 30]; // 00分か 30分
+$mKey = array_rand($minutes); //ランダムにキーを取得
+$addHour = $this->faker->numberBetween(1, 3); // イベント時間 1時間～3時間
+$dummyDate = $this->faker->dateTimeThisMonth; // 今月分をランダムに取得
+$startDate = $dummyDate->setTime($availableHour, $minutes[$mKey]);
+$clone = clone $startDate; // そのままmodifyするとstartDateも変わるためコピー
+$endDate = $clone->modify('+'.$addHour.'hour');
+return [
+略
+'start_date' => $startDate,
+'end_date' => $endDate,
 ];
-array_push($reservations, $reservedInfo); // 連想配列に追加
-}
-// dd($reservations);
-略
-return view('manager.events.show',
-compact('event', 'reservations', 略));
-events/show.blade.php
-
-<div class="max-w-2xl mx-auto">
-@if (!$users->isEmpty())
-予約情報
-@foreach($reservations as $reservation)
-@if(is_nul($reservation['canceled_date']))
-{{ $reservation['name'] }}
-{{ $reservation['number_of_people']}}
-@endif
-@endforeach
-@endif
-</div>
-
-```
-
-# 84. cancel分を除いて予約情報を表示
-``` php
-予約人数の合計クエリ
-
-キャンセル分は合計に含めないようにするため
-whereNulを追加
-index, pastそれぞれに追加
-$reservedPeople = DB:table('reservations')
-->select('event_id', DB:raw('sum(number_of_people) as
-number_of_people’))
-->whereNul(‘canceled_date’)
-->groupBy(‘event_id’);
-events/show.blade.php
-49
-予約状況の
-レイアウトの調整は
-index.blade.phpのtableを参考に
 
 ```
