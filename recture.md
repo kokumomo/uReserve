@@ -1,195 +1,142 @@
 # 87. 予約カレンダーの準備
+
+<p align="center"><a href="https://laravel.com" target="_blank"><img src="public/images/93.png" width="400" alt="Laravel Logo"></a></p>
 ``` php
 
-予約カレンダー
+レイアウトを作成
 
-ログインなしで表示可能
-予約時はログイン(会員登録)必要
-週間カレンダー
-選択日を含む7日間を表示
-10時～20時 30分単位(Flatpickr設定)
-Livewireで作成
-calendar.blade.php
+resources/layouts
+app.blade.phpをコピーして
+calendar.blade.phpを作成
+ナビゲーションなどを削除
+{{ mix(‘js/flatpickr.js ’)}} を追加
 
-ルートのwelcomeをcalendarに変更
-layouts/app.blade.phpからlivewire, mix() などをコピー
-flatpickrはevents/create.blade.phpからコピー
+View/Components 作成
 
-resources/js/flatpickr.js
-
-latpickr("#calendar", {
-  "locale": Japanese,
-  minDate: "today",
-  maxDate: new Date().fp_incr(30) 
-});
-
-const setting = {
-  minuteIncrement: 30 // 追記
+app/View/Components/
+App.Layout.phpをコピーしCalendar.Layout.phpを作成
+public function render()
+{
+return view('layouts.calendar');
 }
+※Bladeコンポーネント機能。
+詳しくは第２弾講座を参照ください。
+
+View/Components 作成
+
+resources/views/calendar.blade.php
+manager/events/create.blade.phpなどをコピー
+<x-calendar-layout>
+<x-slot name=“header”>
+</x-slot>
+こっちにmainが入ってくる
+</x-calendar-layout>
+
 ```
 
-# 88. livewier Calendar作成
+# 94. Bladeコンポーネント
 
 ``` php
-Livewireでカレンダー
 
-php artisan make:livewire Calendar
-app/Http/Livewire/Calendar.php
-resources/views/livewire/calender.blade.phpが生成
+カレンダー幅を固定
 
-app/Http/Livewire/Calendar.php
+resources/css/app.css
+.event-calendar{ width: 1000px; }
 
-use Carbon\Carbon;
-class Calendar extends Component
-{
-  public $currentDate; 
-  public $day; 
-  public $currentWeek;
-
-  public function mount()
-  {
-    $this->currentDate = Carbon::today();
-    $this->currentWeek = [];
-    for($i = 0; $i < 7; $i++ )
-    {
-    $this->day = Carbon::today()->addDays($i)->format('m月d日');
-    array_push($this->currentWeek, $this->day );
-    }
-  // dd($this->currentWeek);
-  }
-}
+views/calendar.blade.php
+<div class="py-4">
+<div class="event-calendar border border-red-400 mx-auto sm:px-6 lg:px-8">
+<div class="bg-white overflow-hidden shadow-xl sm:rounded-lg">
+@livewire('calendar')
+</div>
+</div>
+</div>
 
 livewire/calendar.blade.php
 
-<div>
-  <x-jet-input id="calendar" class="block mt-1 w-ful" type="text" name="calendar" />
-  {{ $currentDate }}
-  <div class="flex">
-    @for ($day = 0; $day < 7; $day++)
-    {{ $currentWeek[$day] }}
-    @endfor
-  </div>
+<div class="text-center text-sm">
+日付を選択してください。本日から最大30日先まで選択可能です。
+</div>
+<input id="calendar" class="block mt-1 mb-2 mx-auto” type="text" 略/>
+<div class="flex border border-green-400 mx-auto">
+<x-calendar-time /> <!̶ コンポーネント作成 仮で直書き̶>
+<x-day />
+<x-day />
+<x-day />
+<x-day />
+<x-day />
+<x-day />
+<x-day />
 </div>
 
-views/calendar.blade.php
+componentsファイル
 
-@livewire('calendar') // コンポーネント読み込み
+components/calendar-title.blade.php
+<div>
+<div class="py-1 px-2 border border-gray-200 text-center">日</div>
+<div class="py-1 px-2 border border-gray-200 text-center">曜日</div>
+<div class="py-1 px-2 h-8 border border-gray-200">10:00</div>
+<div class="py-1 px-2 h-8 border border-gray-200”>10:30</div>
+・・・～20時まで
+</div>
+components/calendar-title.blade.php
+calendar-title.blade.phpをコピーし幅調整
+<div class=“w-32”>
+・・
+</div>
+繰り返し処理
+25
+日 3月1日 3月2日 3月3日 3月4日 3月5日 3月6日 3月7日
+曜日 火 水 木 金 土 日 月
+10:00 イベント名
+10:30
+11:00
+for($i = 0; $i < 7; $i++)
+for($j = 0; $j < 21; $j++)
+
 ```
 
-# 89. wire:changeで日付を更新
+# 95. 判定用データ用意
 
 ``` php
 
-datepickerを変更したら値も変える
+時間を定数でつくる
 
-views/livewire/calendar.blade.php
-
-<input id="calendar" class="block mt-1 w-ful"　type="text" name="calendar"　value="{{ $currentDate }}"　wire:change="getDate($event.target.value)"/>
-
-app/Http/Livewire/Calendar.php
-public function getDate($date)
+判定は 2022-03-01 10:00:00 の形式
+app/Constants/EventConst.php
+<?php
+namespace App\Constants;
+class EventConst
 {
-$this->currentDate = $date; //文字列
-$this->currentWeek = [];
+const EVENT_TIME = [
+'10:00:00',
+'10:30:00',
+'11:00:00',
+～20:00:00 まで ];}
+
+エイリアスに設定
+
+config/app.php
+'aliases' => Facade:defaultAliases()->merge([
+'Constant' => App\Constants\EventConst:class,
+])->toArray(),
+\Constant:EVENT_TIME[0] などで使えるようになる
+
+app/Livewire/Calendar.php
+
+public $checkDay; // 日付判定用
+public $dayOfWeek; // 曜日
 for($i = 0; $i < 7; $i++ )
 {
-$this->day = Carbon::parse($this->currentDate)->addDays($i)-
->format('m月d日'); // parseでCarbonインスタンスに変換後 日付を加算
-array_push($this->currentWeek, $this->day );
+$this->day = CarbonImmutable:today()->addDays($i)->format('m月d日');
+$this->checkDay = CarbonImmutable::today()->addDays($i)->format('Y-m-d');
+$this->dayOfWeek = CarbonImmutable::today()->addDays($i)->dayName;
+array_push($this->currentWeek, [ // 連想配列に変更
+'day' => $this->day, // カレンダー表示用 (○月△日)
+'checkDay' => $this->checkDay, // 判定用 (○○○○-△△-□□)
+'dayOfWeek' => $this->dayOfWeek // 曜日
+]);
+// dd($this->currentWeek )
 }
-}
-
 ```
 
-# 90. whereBetweenで指定期間のイベントを取得
-
-``` php
-選んだ日から7日分のイベント取得
-
-ダミーデータが過去の日付が多い関係で、
-一旦カレンダーを過去日も選択できるようにします。
-
-resources/js/flatpickr.js
-flatpickr("#calendar", {
-"locale": Japanese,
-// minDate: “today", //コメントアウト
-maxDate: new Date().fp_incr(30)
-});
-
-イベント情報の取得
-コードが長くなるので、Serviceに切り離すことにします。
-
-App/Services/EventService.php
-public static function getWeekEvents($startDate, $endDate)
-{
-$reservedPeople = DB::table('reservations')
-->select('event_id', DB::raw('sum(number_of_people) as number_of_people'))
-->groupBy('event_id');
-
-return DB:table('events')
-->leftJoinSub($reservedPeople, 'reservedPeople', function($join){
-$join->on('events.id', '=', 'reservedPeople.event_id');
-})
-->whereBetween('start_date', [$startDate, $endDate])
-->orderBy('start_date', 'asc')
-->get();
-}
-
-Livewire/Calendar.php
-
-use App/Services/EventService;
-public $sevenDaysLater; public $events; // 追加
-public function mount()
-{
-$this->currentDate = Carbon::today();
-$this->sevenDaysLater = $this->currentDate->addDays(7);
-
-$this->events = EventService::getWeekEvents(
-$this->currentDate->format('Y-m-d'),
-$this->sevenDaysLater->format('Y-m-d')
-);
-
-dd($this->events);
-
-```
-
-# 91. CarbonImmutable
-
-``` php
-初期表示で7日増えていた問題
-
-Carbonはミュータブル(可変)とイミュータブル(不変)がある
-デフォルトはミュータブル。
-$this->currentDate = Carbon:today(); // こっちも変わってしまう
-$this->sevenDaysLater = $this->currentDate->addDays(7);
-
-対策1 ->copy()を使ってコピーしてから処理する
-$this->currentDate = Carbon:today();
-$this->sevenDaysLater = $this->currentDate->copy()->addDays(7);
-
-対策2 イミュータブル版を使う
-use Carbon\CarbonImmutable;
-Carbonの箇所を CarbonImmutable に変更する
-
-```
-
-# 93. ダミーデータの修正
-
-``` php
-
-10時～20時 30分単位
-$availableHour = $this->faker->numberBetween(10, 18); //10時～18時
-$minutes = [0, 30]; // 00分か 30分
-$mKey = array_rand($minutes); //ランダムにキーを取得
-$addHour = $this->faker->numberBetween(1, 3); // イベント時間 1時間～3時間
-$dummyDate = $this->faker->dateTimeThisMonth; // 今月分をランダムに取得
-$startDate = $dummyDate->setTime($availableHour, $minutes[$mKey]);
-$clone = clone $startDate; // そのままmodifyするとstartDateも変わるためコピー
-$endDate = $clone->modify('+'.$addHour.'hour');
-return [
-略
-'start_date' => $startDate,
-'end_date' => $endDate,
-];
-
-```
