@@ -17,6 +17,7 @@
   {{--<livewire:counter /> --}}
   @livewire('counter')
   @livewireScripts
+  test
 </body>
 
 </html>
