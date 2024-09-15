@@ -18,7 +18,7 @@
                     </div>
                     @endif
 
-                    <form method="get" action="{{ route('events.store') }}">
+                    <form method="get" action="{{ route('events.edit', ['event' => $event->id ]) }}">
 
 
                         <div>
