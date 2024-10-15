@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\LivewireTestController;
 use App\Http\Controllers\AlpineTestController;
 use App\Http\Controllers\EventController;
+use App\Http\Controllers\ReservationController;
 
 /*
 |--------------------------------------------------------------------------
@@ -39,10 +40,11 @@ Route::prefix('manager')
 
 Route::middleware('can:user-higher')
 ->group(function(){
-    Route::get('index', function () {
-        dd('user');
-    });
+    Route::get('/dashboard', [ReservationController::class, 'dashboard'])->name('dashboard');
+    Route::post('/(id)', [ReservationController::class, 'reserve'])->name('events.reserve');
 });
+
+Route::get('/{id}', [ReservationController::class, 'detail'])->name('events.detail');
 
 Route::controller(LivewireTestController::class)
 ->prefix('livewire-test')->name('livewire-test.')->group(function(){
